@@ -207,26 +207,40 @@ def test_content_hash_unchanged_after_no_op_replace():
 
 
 def _run_cli(argv, stdin_text=""):
-    """Invoke the CLI as if from the shell; return (stdout, exit_code)."""
+    """Invoke the CLI as if from the shell.
+
+    Returns (stdout, stderr, exit_code). Captures both streams so tests can
+    assert that errors land on stderr and data lands on stdout.
+    """
     parser = build_parser()
-    args = parser.parse_args(argv)
-    old_stdin, old_stdout = sys.stdin, sys.stdout
+    old_stdin, old_stdout, old_stderr = sys.stdin, sys.stdout, sys.stderr
     sys.stdin = io.StringIO(stdin_text)
     sys.stdout = io.StringIO()
+    sys.stderr = io.StringIO()
     code = 0
     try:
+        args = parser.parse_args(argv)
         args.func(args)
     except SystemExit as e:
-        code = e.code if isinstance(e.code, int) else 1
+        if e.code is None:
+            code = 0
+        elif isinstance(e.code, int):
+            code = e.code
+        else:
+            # SystemExit("string") would normally print to stderr at top level;
+            # mimic that here so tests can inspect the message.
+            print(str(e.code), file=sys.stderr)
+            code = 1
     out = sys.stdout.getvalue()
-    sys.stdin, sys.stdout = old_stdin, old_stdout
-    return out, code
+    err = sys.stderr.getvalue()
+    sys.stdin, sys.stdout, sys.stderr = old_stdin, old_stdout, old_stderr
+    return out, err, code
 
 
 def test_replace_expect_hash_blocks_on_mismatch(tmp_path):
     f = tmp_path / "doc.md"
     f.write_text("# A {#a}\nold\n", encoding="utf-8")
-    out, code = _run_cli(
+    out, err, code = _run_cli(
         [
             "replace",
             str(f),
@@ -246,7 +260,7 @@ def test_replace_expect_hash_allows_on_match(tmp_path):
     f = tmp_path / "doc.md"
     f.write_text("# A {#a}\nold\n", encoding="utf-8")
     expected = Document.from_file(f).content_hash
-    out, code = _run_cli(
+    out, err, code = _run_cli(
         [
             "replace",
             str(f),
@@ -267,11 +281,52 @@ def test_replace_reads_from_file_flag(tmp_path):
     doc.write_text("# A {#a}\nold\n", encoding="utf-8")
     src = tmp_path / "new.md"
     src.write_text("from-file body\n", encoding="utf-8")
-    out, code = _run_cli(
+    out, err, code = _run_cli(
         ["replace", str(doc), "--id", "a", "--file", str(src), "--in-place"],
     )
     assert code == 0
     assert doc.read_text(encoding="utf-8") == "# A {#a}\nfrom-file body\n"
+
+
+def test_show_no_match_exits_1_with_stderr_message(tmp_path):
+    f = tmp_path / "doc.md"
+    f.write_text("# A {#a}\nbody\n", encoding="utf-8")
+    out, err, code = _run_cli(["show", str(f), "--id", "nope"])
+    assert code == 1
+    assert "no match" in err
+    assert out == ""  # no data on stdout
+
+
+def test_replace_hash_mismatch_exits_2_with_stderr_message(tmp_path):
+    f = tmp_path / "doc.md"
+    f.write_text("# A {#a}\nold\n", encoding="utf-8")
+    out, err, code = _run_cli(
+        ["replace", str(f), "--id", "a", "-i", "--expect-hash", "0" * 64],
+        stdin_text="new\n",
+    )
+    assert code == 2
+    assert "hash mismatch" in err
+    assert out == ""
+
+
+def test_replace_ambiguous_selector_exits_2(tmp_path):
+    f = tmp_path / "doc.md"
+    f.write_text("# A {.shared}\na\n# B {.shared}\nb\n", encoding="utf-8")
+    out, err, code = _run_cli(
+        ["replace", str(f), "--class", "shared", "-i"],
+        stdin_text="new\n",
+    )
+    assert code == 2
+    assert "matched 2 regions" in err
+    assert out == ""
+
+
+def test_no_selector_exits_2(tmp_path):
+    f = tmp_path / "doc.md"
+    f.write_text("# A {#a}\nbody\n", encoding="utf-8")
+    out, err, code = _run_cli(["show", str(f)])
+    assert code == 2
+    assert "specify exactly one" in err
 
 
 def test_version_flag_prints_and_exits_zero(capsys):
@@ -294,7 +349,7 @@ def test_replace_short_flags(tmp_path):
     doc.write_text("# A {#a}\nold\n", encoding="utf-8")
     src = tmp_path / "new.md"
     src.write_text("short-flag body\n", encoding="utf-8")
-    out, code = _run_cli(
+    out, err, code = _run_cli(
         ["replace", str(doc), "--id", "a", "-f", str(src), "-i", "-n"],
     )
     assert code == 0
@@ -306,7 +361,7 @@ def test_replace_short_flags(tmp_path):
 def test_replace_dry_run_emits_diff_and_does_not_write(tmp_path):
     f = tmp_path / "doc.md"
     f.write_text("# A {#a}\nold\n", encoding="utf-8")
-    out, code = _run_cli(
+    out, err, code = _run_cli(
         ["replace", str(f), "--id", "a", "--in-place", "--dry-run"],
         stdin_text="new\n",
     )

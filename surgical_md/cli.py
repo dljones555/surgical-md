@@ -12,6 +12,18 @@ from .selectors import Document
 from .parser import Selection
 
 
+def _error(msg: str, code: int = 2) -> None:
+    """Write msg to stderr and exit with the given code.
+
+    Exit-code convention:
+      0 = success
+      1 = no match (grep convention)
+      2 = cannot proceed (ambiguous selector, hash mismatch, usage error)
+    """
+    print(msg, file=sys.stderr)
+    raise SystemExit(code)
+
+
 def _line(text: str, pos: int) -> int:
     return text.count("\n", 0, pos) + 1
 
@@ -33,7 +45,7 @@ def _select(doc: Document, args: argparse.Namespace) -> list[Selection]:
         x for x in (args.id, args.cls, args.section, args.regex) if x is not None
     ]
     if len(chosen) != 1:
-        raise SystemExit("specify exactly one of --id, --class, --section, --regex")
+        _error("specify exactly one of --id, --class, --section, --regex", 2)
     if args.id is not None:
         return doc.select_by_id(args.id)
     if args.cls is not None:
@@ -55,7 +67,7 @@ def cmd_show(args: argparse.Namespace) -> None:
     doc = Document.from_file(args.file)
     sels = _select(doc, args)
     if not sels:
-        raise SystemExit("no match")
+        _error("no match", 1)
     sep = ""
     for sel in sels:
         sys.stdout.write(sep)
@@ -66,16 +78,18 @@ def cmd_show(args: argparse.Namespace) -> None:
 def cmd_replace(args: argparse.Namespace) -> None:
     doc = Document.from_file(args.file)
     if args.expect_hash and doc.content_hash != args.expect_hash:
-        raise SystemExit(
+        _error(
             f"hash mismatch: file is {doc.content_hash[:12]}, "
-            f"expected {args.expect_hash[:12]}; refusing to write"
+            f"expected {args.expect_hash[:12]}; refusing to write",
+            2,
         )
     sels = _select(doc, args)
     if not sels:
-        raise SystemExit("no match")
+        _error("no match", 1)
     if len(sels) > 1:
-        raise SystemExit(
-            f"selector matched {len(sels)} regions; refine to a single target"
+        _error(
+            f"selector matched {len(sels)} regions; refine to a single target",
+            2,
         )
     sel = sels[0]
     if args.content is None:
