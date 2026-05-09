@@ -274,6 +274,20 @@ def test_replace_reads_from_file_flag(tmp_path):
     assert doc.read_text(encoding="utf-8") == "# A {#a}\nfrom-file body\n"
 
 
+def test_version_flag_prints_and_exits_zero(capsys):
+    """argparse 'version' action exits with code 0 after printing."""
+    parser = build_parser()
+    code = 0
+    try:
+        parser.parse_args(["--version"])
+    except SystemExit as e:
+        code = e.code if isinstance(e.code, int) else 1
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "surgical-md" in captured.out
+    assert "0.1.0" in captured.out
+
+
 def test_replace_short_flags(tmp_path):
     """-i for --in-place, -n for --dry-run, -f for --file."""
     doc = tmp_path / "doc.md"

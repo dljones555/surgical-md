@@ -7,6 +7,7 @@ import difflib
 import sys
 from pathlib import Path
 
+from . import __version__
 from .selectors import Document
 from .parser import Selection
 
@@ -119,6 +120,12 @@ def _add_selector_args(p: argparse.ArgumentParser) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="surgical-md")
+    p.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version=f"surgical-md {__version__}",
+    )
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pl = sub.add_parser("list", help="enumerate selectable regions")
