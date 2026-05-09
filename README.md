@@ -163,6 +163,24 @@ surgical-md show NOTES.md --section agent-rules `
   | surgical-md replace NOTES.md --section agent-rules -i --expect-hash $hash
 ```
 
+## Claude Code skill
+
+This repo ships a [Claude Code](https://claude.com/claude-code) skill at
+[`.claude/skills/surgical-md/SKILL.md`](.claude/skills/surgical-md/SKILL.md).
+Open the repo in Claude Code and the skill is auto-discovered — no extra
+install beyond the CLI itself.
+
+When you ask Claude to edit a named region of a markdown file ("tighten the
+agent rules section in `CLAUDE.md`", "rewrite the roadmap heading"), the
+skill triggers and Claude uses the `hash → show → transform → replace
+--expect-hash` loop documented above instead of round-tripping the whole
+file through the model. Same token-savings and bounded-blast-radius
+guarantees, just driven by an agent.
+
+To use the skill in a *different* project, copy `SKILL.md` into that
+project's `.claude/skills/surgical-md/` directory (or symlink it) and make
+sure the `surgical-md` CLI is on PATH there.
+
 ## Library use
 
 ```python
