@@ -266,6 +266,22 @@ def test_replace_expect_hash_allows_on_match(tmp_path):
     assert f.read_text(encoding="utf-8") == "# A {#a}\nnew\n"
 
 
+def test_replace_dry_run_emits_diff_and_does_not_write(tmp_path):
+    f = tmp_path / "doc.md"
+    f.write_text("# A {#a}\nold\n", encoding="utf-8")
+    out, code = _run_cli(
+        ["replace", str(f), "--id", "a", "--from", "-", "--in-place", "--dry-run"],
+        stdin_text="new\n",
+    )
+    assert code == 0
+    # File untouched.
+    assert f.read_text(encoding="utf-8") == "# A {#a}\nold\n"
+    # Diff present and shaped like a unified diff.
+    assert out.startswith("---")
+    assert "-old" in out
+    assert "+new" in out
+
+
 def test_full_round_trip_on_sample():
     text = (
         "# Intro {#intro .top}\n"

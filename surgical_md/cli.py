@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import sys
 from pathlib import Path
 
@@ -81,6 +82,15 @@ def cmd_replace(args: argparse.Namespace) -> None:
     else:
         new = Path(args.from_).read_text(encoding="utf-8")
     new_doc = doc.replace_inner(sel, new)
+    if args.dry_run:
+        diff = difflib.unified_diff(
+            doc.text.splitlines(keepends=True),
+            new_doc.text.splitlines(keepends=True),
+            fromfile=f"{args.file} (sha256:{doc.content_hash[:12]})",
+            tofile=f"{args.file} (sha256:{new_doc.content_hash[:12]})",
+        )
+        sys.stdout.writelines(diff)
+        return
     if args.in_place:
         Path(args.file).write_text(new_doc.text, encoding="utf-8")
     else:
@@ -130,6 +140,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="path to new content, or - for stdin",
     )
     pr.add_argument("--in-place", action="store_true")
+    pr.add_argument(
+        "--dry-run",
+        dest="dry_run",
+        action="store_true",
+        help="print a unified diff of what would change; do not write",
+    )
     pr.add_argument(
         "--expect-hash",
         dest="expect_hash",
