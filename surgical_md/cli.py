@@ -63,6 +63,11 @@ def cmd_show(args: argparse.Namespace) -> None:
 
 def cmd_replace(args: argparse.Namespace) -> None:
     doc = Document.from_file(args.file)
+    if args.expect_hash and doc.content_hash != args.expect_hash:
+        raise SystemExit(
+            f"hash mismatch: file is {doc.content_hash[:12]}, "
+            f"expected {args.expect_hash[:12]}; refusing to write"
+        )
     sels = _select(doc, args)
     if not sels:
         raise SystemExit("no match")
@@ -125,6 +130,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="path to new content, or - for stdin",
     )
     pr.add_argument("--in-place", action="store_true")
+    pr.add_argument(
+        "--expect-hash",
+        dest="expect_hash",
+        default=None,
+        help="refuse to write unless the file's sha256 matches this value",
+    )
     pr.set_defaults(func=cmd_replace)
 
     pg = sub.add_parser(

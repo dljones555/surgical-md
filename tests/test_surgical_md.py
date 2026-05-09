@@ -1,4 +1,10 @@
+import io
+import sys
+
+import pytest
+
 from surgical_md import Document
+from surgical_md.cli import build_parser
 from surgical_md.parser import slugify
 
 
@@ -198,6 +204,66 @@ def test_content_hash_unchanged_after_no_op_replace():
     sel = doc.select_by_id("a")[0]
     same = doc.replace_inner(sel, doc.get_inner(sel))
     assert same.content_hash == doc.content_hash
+
+
+def _run_cli(argv, stdin_text=""):
+    """Invoke the CLI as if from the shell; return (stdout, exit_code)."""
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    old_stdin, old_stdout = sys.stdin, sys.stdout
+    sys.stdin = io.StringIO(stdin_text)
+    sys.stdout = io.StringIO()
+    code = 0
+    try:
+        args.func(args)
+    except SystemExit as e:
+        code = e.code if isinstance(e.code, int) else 1
+    out = sys.stdout.getvalue()
+    sys.stdin, sys.stdout = old_stdin, old_stdout
+    return out, code
+
+
+def test_replace_expect_hash_blocks_on_mismatch(tmp_path):
+    f = tmp_path / "doc.md"
+    f.write_text("# A {#a}\nold\n", encoding="utf-8")
+    out, code = _run_cli(
+        [
+            "replace",
+            str(f),
+            "--id",
+            "a",
+            "--from",
+            "-",
+            "--in-place",
+            "--expect-hash",
+            "0" * 64,
+        ],
+        stdin_text="new\n",
+    )
+    assert code != 0
+    assert f.read_text(encoding="utf-8") == "# A {#a}\nold\n"
+
+
+def test_replace_expect_hash_allows_on_match(tmp_path):
+    f = tmp_path / "doc.md"
+    f.write_text("# A {#a}\nold\n", encoding="utf-8")
+    expected = Document.from_file(f).content_hash
+    out, code = _run_cli(
+        [
+            "replace",
+            str(f),
+            "--id",
+            "a",
+            "--from",
+            "-",
+            "--in-place",
+            "--expect-hash",
+            expected,
+        ],
+        stdin_text="new\n",
+    )
+    assert code == 0
+    assert f.read_text(encoding="utf-8") == "# A {#a}\nnew\n"
 
 
 def test_full_round_trip_on_sample():
