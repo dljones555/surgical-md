@@ -129,3 +129,19 @@ uv run pytest -q
   parsed.
 
 None of these affect the core select / splice loop.
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE). See `NOTICE` for
+attribution requirements; in short — keep the copyright + license intact in
+forks and derivative works.
+
+## Sponsor
+
+If `surgical-md` saves you time, consider sponsoring continued development.
+Funding links live in [`.github/FUNDING.yml`](.github/FUNDING.yml) (the
+"Sponsor" button on the GitHub repo) — fill in the platforms you want to
+accept and the button appears automatically.
+
+Commercial use is welcome under Apache 2.0; if you'd like priority support,
+custom features, or a private fork, get in touch.
