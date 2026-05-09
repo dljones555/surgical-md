@@ -90,6 +90,11 @@ def cmd_grep(args: argparse.Namespace) -> None:
         print(f"{args.file}:{line}: {sel.kind} {_attrs_str(sel)}")
 
 
+def cmd_hash(args: argparse.Namespace) -> None:
+    doc = Document.from_file(args.file)
+    print(doc.content_hash)
+
+
 def _add_selector_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--id", help="select by id")
     p.add_argument("--class", dest="cls", help="select by class")
@@ -129,6 +134,13 @@ def build_parser() -> argparse.ArgumentParser:
     pg.add_argument("file")
     pg.add_argument("pattern")
     pg.set_defaults(func=cmd_grep)
+
+    ph = sub.add_parser(
+        "hash",
+        help="print sha256 of the document (use with replace --expect-hash)",
+    )
+    ph.add_argument("file")
+    ph.set_defaults(func=cmd_hash)
 
     return p
 

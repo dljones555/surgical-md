@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 
@@ -78,6 +79,11 @@ class Document:
                 seen.add(smallest)
                 out.append(smallest)
         return out
+
+    @property
+    def content_hash(self) -> str:
+        """SHA-256 of the document text (UTF-8). Used for atomic-write checks."""
+        return hashlib.sha256(self.text.encode("utf-8")).hexdigest()
 
     def get_inner(self, sel: Selection) -> str:
         return self.text[sel.inner_start : sel.inner_end]

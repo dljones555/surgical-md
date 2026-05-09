@@ -184,6 +184,22 @@ def test_select_by_heading_text_strips_attr_block():
     assert sels[0].id == "i"
 
 
+def test_content_hash_changes_with_text():
+    a = Document("# A {#a}\nold\n")
+    b = Document("# A {#a}\nnew\n")
+    assert a.content_hash != b.content_hash
+    # Stable for the same input.
+    assert a.content_hash == Document("# A {#a}\nold\n").content_hash
+
+
+def test_content_hash_unchanged_after_no_op_replace():
+    text = "# A {#a}\nbody\n"
+    doc = Document(text)
+    sel = doc.select_by_id("a")[0]
+    same = doc.replace_inner(sel, doc.get_inner(sel))
+    assert same.content_hash == doc.content_hash
+
+
 def test_full_round_trip_on_sample():
     text = (
         "# Intro {#intro .top}\n"
