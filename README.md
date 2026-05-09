@@ -1,15 +1,28 @@
 # surgical-md
 
-Surgical edits to Markdown. Address a specific region of a `.md` file by id,
-class, or named section, hand it to an LLM (or any transformer) over a pipe,
-and splice the result back in place. Everything outside the selection is
-preserved byte-for-byte — this is AST-style editing on the source text, not a
-re-render.
+Surgical edits to Markdown for humans and AI agents. Address a specific
+region of a `.md` file by id, class, named section, or heading text, hand it
+to an LLM (or any transformer) over a pipe, and splice the result back in
+place. Everything outside the selection is preserved byte-for-byte — this is
+AST-style editing on the source text, not a re-render.
 
 ## Why
 
-Whole-file LLM rewrites have unintended side effects on content beyond your intent changes. Adjusting this can be a back-and-forth effort with multiple prompting turns or require manual editing. If you can name *just* the region you
-care about, the model only sees that region and only that region changes.
+**Token economics.** Sending a 2,000-line `CLAUDE.md` to a model just to
+tighten its "agent rules" section costs roughly 10× the tokens it should.
+With `surgical-md` the model sees only the region you're editing — cheaper
+inference, faster turnaround, and outputs that aren't diluted by unrelated
+context.
+
+**Bounded blast radius.** Whole-file LLM rewrites drift: tone shifts,
+formatting changes, paragraphs you didn't ask to touch get "improved." When
+the model only sees one named region, only that region can change. Bytes
+outside the selection are guaranteed identical.
+
+**Agent-friendly.** The `<!-- SECTION: name -->` markers are plain ASCII that
+render to nothing — humans see clean prose, agents see addressable handles.
+Combined with auto-IDs derived from heading text (Pandoc-style), most
+existing markdown is addressable without retrofitting anchors.
 
 ## Addressing model
 
@@ -58,42 +71,59 @@ uv sync
 
 ## CLI
 
-Run via `uv run python -m surgical_md`.
+After `uv sync`, the `surgical-md` command is on the path:
 
 ```bash
 # enumerate selectable regions with line ranges and attrs
-uv run python -m surgical_md list FILE
+uv run surgical-md list FILE
 
 # print the inner content of a single region
-uv run python -m surgical_md show  FILE --id roadmap
-uv run python -m surgical_md show  FILE --class draft
-uv run python -m surgical_md show  FILE --section agent-rules
-uv run python -m surgical_md show  FILE --regex 'TODO\(\w+\)'
+uv run surgical-md show FILE --id roadmap
+uv run surgical-md show FILE --class draft
+uv run surgical-md show FILE --section agent-rules
+uv run surgical-md show FILE --regex 'TODO\(\w+\)'
 
 # splice new content into a region (markers/headings preserved)
-uv run python -m surgical_md replace FILE --id roadmap --from new.md --in-place
-cat new.md | uv run python -m surgical_md replace FILE --id roadmap --from -
+uv run surgical-md replace FILE --id roadmap --from new.md --in-place
+cat new.md | uv run surgical-md replace FILE --id roadmap --from -
+
+# preview the splice as a unified diff without writing
+uv run surgical-md replace FILE --id roadmap --from new.md --dry-run
+
+# atomic write: refuse to splice if the file changed since you last read it
+HASH=$(uv run surgical-md hash FILE)
+... transform ...
+uv run surgical-md replace FILE --id roadmap --from new.md --in-place \
+  --expect-hash "$HASH"
 
 # regex matches plus their containing region
-uv run python -m surgical_md grep FILE 'pattern'
+uv run surgical-md grep FILE 'pattern'
+
+# sha256 of the document (useful with --expect-hash)
+uv run surgical-md hash FILE
 ```
 
 `replace` refuses ambiguous selectors: if your `--class` or `--regex` matches
 more than one region, refine to a single target. Without `--in-place` the
-modified document is written to stdout.
+modified document is written to stdout. With `--dry-run` no file is touched
+regardless of `--in-place`.
 
 ## The pipe pattern
 
 The tool is deliberately LLM-agnostic. Wire any model CLI in over stdio:
 
 ```bash
-surgical-md show NOTES.md --section agent-rules \
+HASH=$(uv run surgical-md hash NOTES.md)
+uv run surgical-md show NOTES.md --section agent-rules \
   | claude -p "tighten these rules; keep the bullet style" \
-  | surgical-md replace NOTES.md --section agent-rules --from - --in-place
+  | uv run surgical-md replace NOTES.md --section agent-rules \
+      --from - --in-place --expect-hash "$HASH"
 ```
 
-The model only sees the named region. Everything outside it is preserved
-exactly.
+The model only sees the named region — that's the token-savings win.
+`--expect-hash` makes the write atomic: if anything else touched the file
+between `hash` and `replace`, the splice is refused rather than silently
+clobbering a concurrent edit.
 
 ## Library use
 
@@ -102,15 +132,27 @@ from surgical_md import Document
 
 doc = Document.from_file("NOTES.md")
 
+# Select by section, id, class, regex, or heading text:
 (sel,) = doc.select_by_section("agent-rules")
-old = doc.get_inner(sel)
+# alternatives:
+#   doc.select_by_id("roadmap")
+#   doc.select_by_class("draft")
+#   doc.select_by_heading_text("Roadmap")
+#   doc.select_by_heading_text("road", exact=False)
+#   doc.select_by_regex(r"TODO\(\w+\)")
 
+old = doc.get_inner(sel)
 new_doc = doc.replace_inner(sel, transform(old))
-open("NOTES.md", "w", encoding="utf-8").write(new_doc.text)
+
+# Atomic write pattern:
+if new_doc.content_hash != doc.content_hash:
+    open("NOTES.md", "w", encoding="utf-8").write(new_doc.text)
 ```
 
-Selectors return `list[Selection]`; `Selection` carries `kind`, `id`,
-`classes`, `name`, `level`, and the byte offsets used by `replace_inner`.
+Selectors return `list[Selection]`. `Selection` carries `kind`, `id`,
+`classes`, `name`, `level`, `heading_text`, `auto_id`, and the byte offsets
+used by `replace_inner`. `Document.content_hash` is the SHA-256 of the
+document text — useful for atomic-write coordination across processes.
 
 ## Tests
 
@@ -118,11 +160,16 @@ Selectors return `list[Selection]`; `Selection` carries `kind`, `id`,
 uv run pytest -q
 ```
 
-## Scope (v1)
+## Scope
 
 - ATX headings only (`#`…`######`); setext `===` / `---` deferred.
-- `[text](url){#id}` link attrs aren't recognized as a span — for v1 use a
-  bare `[text]{#id}` span if you need to address it.
+- Headings without an explicit `{#id}` get a Pandoc-style auto-id derived
+  from the heading text (`## My Heading` → addressable as `--id my-heading`).
+  Auto-IDs use ASCII-only slug rules; non-ASCII letters are dropped. Two
+  headings with the same text resolve to the same auto-id and `replace`
+  refuses the ambiguous match (a feature — fail loud, not silent).
+- `[text](url){#id}` link attrs aren't recognized as a span — use a bare
+  `[text]{#id}` span if you need to address it.
 - Fenced-code masking treats the close fence as the same length as the open
   (CommonMark allows longer); fine in practice.
 - `key=value` attributes in `{...}` are ignored; only `#id` and `.class` are
