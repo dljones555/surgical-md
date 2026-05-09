@@ -340,7 +340,7 @@ def test_version_flag_prints_and_exits_zero(capsys):
     captured = capsys.readouterr()
     assert code == 0
     assert "surgical-md" in captured.out
-    assert "0.1.0" in captured.out
+    assert "0.2.0" in captured.out
 
 
 def test_replace_short_flags(tmp_path):

@@ -63,67 +63,105 @@ code blocks is ignored.
 
 ## Install
 
-Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.12+. No PyPI release yet — install directly from the
+repository (which lets you audit the source before running it):
 
 ```bash
-uv sync
+# uv users (recommended)
+uv tool install git+https://github.com/dljones555/surgical-md
+
+# pipx users
+pipx install git+https://github.com/dljones555/surgical-md
+
+# from a local clone (for hacking on it)
+git clone https://github.com/dljones555/surgical-md
+cd surgical-md
+uv sync     # installs deps + the surgical-md script
 ```
+
+After install, `surgical-md` is on your PATH. (Inside a clone, prefix with
+`uv run` if you haven't activated the venv.)
+
+## Quick start
+
+```bash
+# pull a section out, transform it any way you like, splice it back
+surgical-md show NOTES.md --section agent-rules \
+  | your-llm "tighten this; keep the bullet style" \
+  | surgical-md replace NOTES.md --section agent-rules -i
+```
+
+That's the whole loop. The model only sees the named region — that's the
+token-savings win — and bytes outside the section are guaranteed unchanged.
 
 ## CLI
 
-After `uv sync`, the `surgical-md` command is on the path:
-
 ```bash
 # enumerate selectable regions with line ranges and attrs
-uv run surgical-md list FILE
+surgical-md list FILE
 
 # print the inner content of a single region
-uv run surgical-md show FILE --id roadmap
-uv run surgical-md show FILE --class draft
-uv run surgical-md show FILE --section agent-rules
-uv run surgical-md show FILE --regex 'TODO\(\w+\)'
+surgical-md show FILE --id roadmap
+surgical-md show FILE --class draft
+surgical-md show FILE --section agent-rules
+surgical-md show FILE --regex 'TODO\(\w+\)'
 
-# splice new content into a region (markers/headings preserved)
-uv run surgical-md replace FILE --id roadmap --from new.md --in-place
-cat new.md | uv run surgical-md replace FILE --id roadmap --from -
-
-# preview the splice as a unified diff without writing
-uv run surgical-md replace FILE --id roadmap --from new.md --dry-run
+# splice new content (stdin by default; -i writes back; -n previews)
+echo 'new body' | surgical-md replace FILE --id roadmap -i
+surgical-md replace FILE --id roadmap -f new.md -i
+surgical-md replace FILE --id roadmap -f new.md -n        # diff preview, no write
 
 # atomic write: refuse to splice if the file changed since you last read it
-HASH=$(uv run surgical-md hash FILE)
+HASH=$(surgical-md hash FILE)
 ... transform ...
-uv run surgical-md replace FILE --id roadmap --from new.md --in-place \
-  --expect-hash "$HASH"
+surgical-md replace FILE --id roadmap -f new.md -i --expect-hash "$HASH"
 
 # regex matches plus their containing region
-uv run surgical-md grep FILE 'pattern'
+surgical-md grep FILE 'pattern'
 
-# sha256 of the document (useful with --expect-hash)
-uv run surgical-md hash FILE
+# sha256 of the document (use with --expect-hash)
+surgical-md hash FILE
 ```
 
-`replace` refuses ambiguous selectors: if your `--class` or `--regex` matches
-more than one region, refine to a single target. Without `--in-place` the
-modified document is written to stdout. With `--dry-run` no file is touched
-regardless of `--in-place`.
+**Flags on `replace`:** `-f PATH` / `--file PATH` reads new content from a
+file (default: stdin). `-i` / `--in-place` writes back to FILE (default:
+stdout). `-n` / `--dry-run` prints a unified diff and writes nothing.
+`--expect-hash SHA256` refuses to write unless the document's hash matches.
+
+**Selectors are mutually exclusive:** pick one of `--id`, `--class`,
+`--section`, or `--regex`. `replace` refuses ambiguous matches (more than
+one region matched) so you can't silently edit the wrong place.
+
+**Exit codes:** `0` success, `1` no match (grep convention), `2` cannot
+proceed (ambiguous selector, hash mismatch, missing selector). Errors go
+to stderr; data goes to stdout.
+
+**Other flags:** `--version` / `-V`.
 
 ## The pipe pattern
 
 The tool is deliberately LLM-agnostic. Wire any model CLI in over stdio:
 
 ```bash
-HASH=$(uv run surgical-md hash NOTES.md)
-uv run surgical-md show NOTES.md --section agent-rules \
+HASH=$(surgical-md hash NOTES.md)
+surgical-md show NOTES.md --section agent-rules \
   | claude -p "tighten these rules; keep the bullet style" \
-  | uv run surgical-md replace NOTES.md --section agent-rules \
-      --from - --in-place --expect-hash "$HASH"
+  | surgical-md replace NOTES.md --section agent-rules -i --expect-hash "$HASH"
 ```
 
 The model only sees the named region — that's the token-savings win.
 `--expect-hash` makes the write atomic: if anything else touched the file
 between `hash` and `replace`, the splice is refused rather than silently
 clobbering a concurrent edit.
+
+**PowerShell equivalent** (no `<<<` here-string operator; pipe instead):
+
+```powershell
+$hash = surgical-md hash NOTES.md
+surgical-md show NOTES.md --section agent-rules `
+  | your-llm "tighten this" `
+  | surgical-md replace NOTES.md --section agent-rules -i --expect-hash $hash
+```
 
 ## Library use
 
