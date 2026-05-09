@@ -9,6 +9,16 @@ license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "David Jones", email = "dljones555@gmail.com" }]
 dependencies = []
 
+[project.scripts]
+surgical-md = "surgical_md.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["surgical_md"]
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
