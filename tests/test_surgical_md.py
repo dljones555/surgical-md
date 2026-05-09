@@ -159,6 +159,31 @@ def test_explicit_id_overrides_auto_id():
     assert sel.heading_text == "My Heading"
 
 
+def test_select_by_heading_text_exact():
+    text = "# Intro\nbody\n## Notes\nnotes\n# Refs\nrefs\n"
+    doc = Document(text)
+    sels = doc.select_by_heading_text("Notes")
+    assert len(sels) == 1
+    assert sels[0].level == 2
+    assert doc.get_inner(sels[0]) == "notes\n"
+
+
+def test_select_by_heading_text_substring_case_insensitive():
+    text = "# Project Roadmap {#r}\nplans\n## Other\nx\n"
+    doc = Document(text)
+    sels = doc.select_by_heading_text("road", exact=False)
+    assert len(sels) == 1
+    assert sels[0].id == "r"
+
+
+def test_select_by_heading_text_strips_attr_block():
+    text = "# Intro {#i .top}\nbody\n"
+    doc = Document(text)
+    sels = doc.select_by_heading_text("Intro")
+    assert len(sels) == 1
+    assert sels[0].id == "i"
+
+
 def test_full_round_trip_on_sample():
     text = (
         "# Intro {#intro .top}\n"

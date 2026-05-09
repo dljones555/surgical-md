@@ -30,6 +30,29 @@ class Document:
             if s.kind == "comment_section" and s.name == name
         ]
 
+    def select_by_heading_text(
+        self, text: str, *, exact: bool = True
+    ) -> list[Selection]:
+        """Match heading sections by their visible text (after attr stripping).
+
+        With `exact=False`, performs a case-insensitive substring match — useful
+        when you only remember a fragment of the heading.
+        """
+        if exact:
+            return [
+                s
+                for s in self.selections
+                if s.kind == "heading_section" and s.heading_text == text
+            ]
+        needle = text.lower()
+        return [
+            s
+            for s in self.selections
+            if s.kind == "heading_section"
+            and s.heading_text
+            and needle in s.heading_text.lower()
+        ]
+
     def select_by_regex(
         self, pattern: str, flags: int = 0, kind: str | None = None
     ) -> list[Selection]:
