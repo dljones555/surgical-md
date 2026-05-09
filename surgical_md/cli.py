@@ -77,10 +77,10 @@ def cmd_replace(args: argparse.Namespace) -> None:
             f"selector matched {len(sels)} regions; refine to a single target"
         )
     sel = sels[0]
-    if args.from_ == "-":
+    if args.content is None:
         new = sys.stdin.read()
     else:
-        new = Path(args.from_).read_text(encoding="utf-8")
+        new = Path(args.content).read_text(encoding="utf-8")
     new_doc = doc.replace_inner(sel, new)
     if args.dry_run:
         diff = difflib.unified_diff(
@@ -134,13 +134,21 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("file")
     _add_selector_args(pr)
     pr.add_argument(
-        "--from",
-        dest="from_",
-        required=True,
-        help="path to new content, or - for stdin",
+        "-f",
+        "--file",
+        dest="content",
+        default=None,
+        help="path to new content (default: read stdin)",
     )
-    pr.add_argument("--in-place", action="store_true")
     pr.add_argument(
+        "-i",
+        "--in-place",
+        dest="in_place",
+        action="store_true",
+        help="write back to FILE instead of stdout",
+    )
+    pr.add_argument(
+        "-n",
         "--dry-run",
         dest="dry_run",
         action="store_true",

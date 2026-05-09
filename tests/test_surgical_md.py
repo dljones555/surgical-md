@@ -232,8 +232,6 @@ def test_replace_expect_hash_blocks_on_mismatch(tmp_path):
             str(f),
             "--id",
             "a",
-            "--from",
-            "-",
             "--in-place",
             "--expect-hash",
             "0" * 64,
@@ -254,8 +252,6 @@ def test_replace_expect_hash_allows_on_match(tmp_path):
             str(f),
             "--id",
             "a",
-            "--from",
-            "-",
             "--in-place",
             "--expect-hash",
             expected,
@@ -266,11 +262,38 @@ def test_replace_expect_hash_allows_on_match(tmp_path):
     assert f.read_text(encoding="utf-8") == "# A {#a}\nnew\n"
 
 
+def test_replace_reads_from_file_flag(tmp_path):
+    doc = tmp_path / "doc.md"
+    doc.write_text("# A {#a}\nold\n", encoding="utf-8")
+    src = tmp_path / "new.md"
+    src.write_text("from-file body\n", encoding="utf-8")
+    out, code = _run_cli(
+        ["replace", str(doc), "--id", "a", "--file", str(src), "--in-place"],
+    )
+    assert code == 0
+    assert doc.read_text(encoding="utf-8") == "# A {#a}\nfrom-file body\n"
+
+
+def test_replace_short_flags(tmp_path):
+    """-i for --in-place, -n for --dry-run, -f for --file."""
+    doc = tmp_path / "doc.md"
+    doc.write_text("# A {#a}\nold\n", encoding="utf-8")
+    src = tmp_path / "new.md"
+    src.write_text("short-flag body\n", encoding="utf-8")
+    out, code = _run_cli(
+        ["replace", str(doc), "--id", "a", "-f", str(src), "-i", "-n"],
+    )
+    assert code == 0
+    # -n should suppress the write even though -i is set.
+    assert doc.read_text(encoding="utf-8") == "# A {#a}\nold\n"
+    assert out.startswith("---")
+
+
 def test_replace_dry_run_emits_diff_and_does_not_write(tmp_path):
     f = tmp_path / "doc.md"
     f.write_text("# A {#a}\nold\n", encoding="utf-8")
     out, code = _run_cli(
-        ["replace", str(f), "--id", "a", "--from", "-", "--in-place", "--dry-run"],
+        ["replace", str(f), "--id", "a", "--in-place", "--dry-run"],
         stdin_text="new\n",
     )
     assert code == 0
