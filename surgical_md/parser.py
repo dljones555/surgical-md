@@ -17,6 +17,34 @@ class Selection:
     classes: tuple[str, ...] = ()
     name: str | None = None
     level: int | None = None
+    heading_text: str | None = None
+    auto_id: bool = False  # True if id was derived from heading text
+
+
+def slugify(text: str) -> str:
+    """Pandoc-style auto-id: lowercase, strip formatting, spaces → hyphens.
+
+    Conservative ASCII slug; non-ASCII letters are dropped. Returns 'section'
+    if the result is empty.
+    """
+    s = text.strip().lower()
+    # Strip basic inline-emphasis markers so '`code`' or '*bold*' don't
+    # leak punctuation into the slug.
+    s = re.sub(r"[`*_~]+", "", s)
+    # Drop bracketed link / image markup, keep the link text.
+    s = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", s)
+    s = re.sub(r"\[([^\]]*)\]\[[^\]]*\]", r"\1", s)
+    # Whitespace → hyphen.
+    s = re.sub(r"\s+", "-", s)
+    # Drop everything that isn't an allowed slug char.
+    s = re.sub(r"[^a-z0-9_\-.]", "", s)
+    # Collapse runs of hyphens left behind by stripped punctuation.
+    s = re.sub(r"-+", "-", s)
+    # Identifiers can't start with a digit or punctuation, and we trim trailing
+    # punctuation too so 'foo---' doesn't become 'foo---'.
+    s = re.sub(r"^[^a-z]+", "", s)
+    s = re.sub(r"[^a-z0-9_]+$", "", s)
+    return s or "section"
 
 
 # A fenced code block: ``` or ~~~ opener through a matching closer of the same
@@ -71,19 +99,26 @@ def _skip_leading_newline(text: str, i: int) -> int:
 
 
 def _parse_headings(text: str, masked: list[tuple[int, int]]) -> list[Selection]:
-    raw: list[tuple[re.Match[str], int, str | None, tuple[str, ...]]] = []
+    raw: list[
+        tuple[re.Match[str], int, str | None, tuple[str, ...], str, bool]
+    ] = []
     for m in _HEADING_RE.finditer(text):
         if _in_ranges(m.start(), masked):
             continue
         level = len(m.group(1))
+        heading_text = m.group(2).strip()
         id_, classes = _parse_attrs(m.group(3) or "")
-        raw.append((m, level, id_, classes))
+        auto = False
+        if id_ is None:
+            id_ = slugify(heading_text)
+            auto = True
+        raw.append((m, level, id_, classes, heading_text, auto))
 
     out: list[Selection] = []
-    for i, (m, level, id_, classes) in enumerate(raw):
+    for i, (m, level, id_, classes, htext, auto) in enumerate(raw):
         end = len(text)
         for j in range(i + 1, len(raw)):
-            m2, lvl2, _, _ = raw[j]
+            m2, lvl2, _, _, _, _ = raw[j]
             if lvl2 <= level:
                 end = m2.start()
                 break
@@ -98,6 +133,8 @@ def _parse_headings(text: str, masked: list[tuple[int, int]]) -> list[Selection]
                 id=id_,
                 classes=classes,
                 level=level,
+                heading_text=htext,
+                auto_id=auto,
             )
         )
     return out

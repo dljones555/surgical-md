@@ -1,4 +1,5 @@
 from surgical_md import Document
+from surgical_md.parser import slugify
 
 
 def test_heading_with_id_and_class():
@@ -114,6 +115,48 @@ def test_nested_comment_sections():
     assert len(inner) == 1 and len(outer) == 1
     assert doc.get_inner(inner[0]) == "x\n"
     assert "<!-- SECTION: inner -->" in doc.get_inner(outer[0])
+
+
+def test_slugify_basic():
+    assert slugify("My Heading") == "my-heading"
+    assert slugify("Hello, World!") == "hello-world"
+    assert slugify("API & Auth") == "api-auth"
+
+
+def test_slugify_strips_leading_non_letters():
+    assert slugify("1. First Section") == "first-section"
+    assert slugify("---weird---") == "weird"
+
+
+def test_slugify_strips_inline_emphasis_and_links():
+    assert slugify("`code` heading") == "code-heading"
+    assert slugify("*bold* and _italic_") == "bold-and-italic"
+    assert slugify("See [the docs](http://x)") == "see-the-docs"
+
+
+def test_slugify_empty_falls_back():
+    assert slugify("") == "section"
+    assert slugify("!!!") == "section"
+
+
+def test_heading_without_explicit_id_gets_auto_id():
+    text = "# My Heading\nbody\n"
+    doc = Document(text)
+    sels = doc.select_by_id("my-heading")
+    assert len(sels) == 1
+    assert sels[0].auto_id is True
+    assert sels[0].heading_text == "My Heading"
+    assert doc.get_inner(sels[0]) == "body\n"
+
+
+def test_explicit_id_overrides_auto_id():
+    text = "# My Heading {#custom}\nbody\n"
+    doc = Document(text)
+    assert doc.select_by_id("custom")
+    assert not doc.select_by_id("my-heading")
+    sel = doc.select_by_id("custom")[0]
+    assert sel.auto_id is False
+    assert sel.heading_text == "My Heading"
 
 
 def test_full_round_trip_on_sample():
