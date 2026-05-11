@@ -1,5 +1,7 @@
 # surgical-md
 
+[![tests](https://github.com/dljones555/surgical-md/actions/workflows/test.yml/badge.svg)](https://github.com/dljones555/surgical-md/actions/workflows/test.yml)
+
 Surgical edits to Markdown for humans and AI agents. Address a specific
 region of a `.md` file by id, class, named section, or heading text, hand it
 to an LLM (or any transformer) over a pipe, and splice the result back in
