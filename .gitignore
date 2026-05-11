@@ -11,3 +11,6 @@ wheels/
 
 # Tooling caches
 .pytest_cache/
+
+# Local scratch files (any `*.local.md` is untracked by convention)
+*.local.md
